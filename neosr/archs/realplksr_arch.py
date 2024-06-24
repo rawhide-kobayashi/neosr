@@ -119,6 +119,8 @@ class realplksr(nn.Module):
     ):
         super().__init__()
 
+        self.upscale = upscaling_factor
+        self.dysample = dysample
         if not self.training:
             dropout = 0
 
@@ -138,17 +140,23 @@ class realplksr(nn.Module):
             torch.repeat_interleave, repeats=upscaling_factor**2, dim=1
         )
 
-        if dysample:
-            groups = 3 if 3 * upscaling_factor**2 < 4 else 4
+        if dysample and upscaling_factor != 1:
+            groups = out_ch if 3 * upscaling_factor**2 < 4 else 4
             self.to_img = DySample(
-                3 * upscaling_factor**2, upscaling_factor, groups=groups, dyscope=True
+                in_ch * upscaling_factor**2,
+                out_ch,
+                upscaling_factor,
+                groups=groups,
+                end_convolution=True if upscaling_factor != 1 else False,
             )
         else:
             self.to_img = nn.PixelShuffle(upscaling_factor)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.feats(x) + self.repeat_op(x)
-        return self.to_img(x)
+        if not self.dysample or (self.dysample and self.upscale != 1):
+            x = self.to_img(x)
+        return x
 
 
 @ARCH_REGISTRY.register()

@@ -57,7 +57,6 @@ datasets:
 #val:
 #  val_freq: 1000
 #  save_img: true
-#  save_tb: true
 #  tile: -1 # 200
 #  metrics:
 #    psnr:
@@ -88,7 +87,7 @@ jpeg_range2: [35, 95]
 
 path:
   #pretrain_network_g: 'experiments/pretrain.pth'
-  resume_state: ~
+  #resume_state: ~
   #strict_load_g: false # do not uncomment, read docs
 
 network_g:
@@ -99,7 +98,9 @@ network_d:
 
 train:
   #eco: true
-  #ema: 0.999
+  #eco_init: 15000
+
+  ema: 0.999
   #sam: "fsam"
   #sam_init: 1000
   total_iter: 1000000
@@ -114,13 +115,15 @@ train:
     #warmup_steps: 1600
 
   optim_d:
-    type: adan
-    lr: !!float 3e-4
-    betas: [0.98, 0.92, 0.987]
-    weight_decay: 0.02
+    type: nadam
+    lr: !!float 1e-4
+    betas: [0.98, 0.99]
+    weight_decay: 0.01
+    decoupled_weight_decay: true
 
   # losses
-  #wavelet_guided: "disc" # "off", "on"
+  #wavelet_guided: true
+  #wavelet_init: 80000
   mssim_opt:
     type: mssim
     loss_weight: 1.0
@@ -169,3 +172,4 @@ logger:
   print_freq: 100
   save_checkpoint_freq: 1000
   use_tb_logger: true
+  #save_tb_img: true
