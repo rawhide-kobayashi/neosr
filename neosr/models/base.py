@@ -430,20 +430,21 @@ class base:
         Args:
             loss_dict (OrderedDict): Loss dict.
         """
-        if self.opt["dist"]:
-            keys = []
-            losses = []
+        with torch.inference_mode():
+            if self.opt["dist"]:
+                keys = []
+                losses = []
+                for name, value in loss_dict.items():
+                    keys.append(name)
+                    losses.append(value)
+                losses = torch.stack(losses, 0)
+                torch.distributed.reduce(losses, dst=0)
+                if self.opt["rank"] == 0:
+                    losses /= self.opt["world_size"]
+                loss_dict = {key: loss for key, loss in zip(keys, losses, strict=True)}
+
+            log_dict = OrderedDict()
             for name, value in loss_dict.items():
-                keys.append(name)
-                losses.append(value)
-            losses = torch.stack(losses, 0)
-            torch.distributed.reduce(losses, dst=0)
-            if self.opt["rank"] == 0:
-                losses /= self.opt["world_size"]
-            loss_dict = {key: loss for key, loss in zip(keys, losses, strict=True)}
+                log_dict[name] = value.mean().item()
 
-        log_dict = OrderedDict()
-        for name, value in loss_dict.items():
-            log_dict[name] = value.mean().item()
-
-        return log_dict
+            return log_dict
