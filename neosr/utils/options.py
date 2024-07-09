@@ -30,7 +30,6 @@ def toml_load(f) -> dict[str, Any]:
         raise tomllib.TOMLDecodeError(msg)
         sys.exit(1)
 
-
 def parse_options(
     root_path: PosixPath | str, is_train: bool = True
 ) -> tuple[dict[str, Any] | None, argparse.Namespace]:
@@ -165,17 +164,17 @@ def parse_options(
         # parse toml to dict
         opt = toml_load(args.opt)
 
-        # distributed settings
-        if args.launcher == "none":
-            opt["dist"] = False
-        else:
-            opt["dist"] = True
-            if args.launcher == "slurm" and "dist_params" in opt:
-                init_dist(args.launcher, **opt["dist_params"])
+        # distributed settings, init_dist can only be run once!
+        if args.launcher == 'none':
+            opt['dist'] = False
+        elif init_dist_launcher == True:
+            opt['dist'] = True
+            if args.launcher == 'slurm' and 'dist_params' in opt:
+                init_dist(args.launcher, **opt['dist_params'])
             else:
                 init_dist(args.launcher)
-        opt["rank"], opt["world_size"] = get_dist_info()
-
+        opt['rank'], opt['world_size'] = get_dist_info()
+    
         # random seed
         seed = opt.get("manual_seed")
         if seed is None:
