@@ -3,8 +3,8 @@ import logging
 import math
 import sys
 import time
-import os
 from os import path as osp
+from pathlib import Path
 
 import torch
 
@@ -41,7 +41,7 @@ def init_tb_loggers(opt):
     tb_logger = None
     if opt["logger"].get("use_tb_logger") and "debug" not in opt["name"]:
         tb_logger = init_tb_logger(
-            log_dir=osp.join(opt["root_path"], "experiments", "tb_logger", opt["name"])
+            log_dir=Path(opt["root_path"]) / "experiments" / "tb_logger" / opt["name"]
         )
     return tb_logger
 
@@ -95,12 +95,11 @@ def create_train_val_dataloader(opt, logger):
                 sampler=None,
                 seed=opt["manual_seed"],
             )
-            logger.info(
-                f'Number of val images/folders in {dataset_opt["name"]}: {len(val_set)}'
-            )
+            logger.info(f"Number of val images/folders: {len(val_set)}")
             val_loaders.append(val_loader)
         else:
-            raise ValueError(f"Dataset phase {phase} is not recognized.")
+            msg = f"Dataset phase {phase} is not recognized."
+            raise ValueError(msg)
 
     return train_loader, train_sampler, val_loaders, total_epochs, total_iters
 
@@ -108,19 +107,18 @@ def create_train_val_dataloader(opt, logger):
 def load_resume_state(opt):
     resume_state_path = None
     if opt["auto_resume"]:
-        state_path = osp.join("experiments", opt["name"], "training_states")
-        if osp.isdir(state_path):
+        state_path = Path("experiments") / opt["name"] / "training_states"
+        if Path.is_dir(state_path):
             states = list(
                 scandir(state_path, suffix="state", recursive=False, full_path=False)
             )
             if len(states) != 0:
                 states = [float(v.split(".state")[0]) for v in states]
-                resume_state_path = osp.join(state_path, f"{max(states):.0f}.state")
+                resume_state_path = Path(state_path) / f"{max(states):.0f}.state"
                 opt["path"]["resume_state"] = resume_state_path
 
-    else:
-        if opt["path"].get("resume_state"):
-            resume_state_path = opt["path"]["resume_state"]
+    elif opt["path"].get("resume_state"):
+        resume_state_path = opt["path"]["resume_state"]
 
     if resume_state_path is None:
         resume_state = None
@@ -130,7 +128,7 @@ def load_resume_state(opt):
     return resume_state
 
 
-def train_pipeline(root_path):
+def train_pipeline(root_path) -> None:
     # parse options, set distributed setting, set random seed
     opt, args = parse_options(root_path, is_train=True, init_dist_launcher=True)
     opt["root_path"] = root_path
@@ -156,19 +154,19 @@ def train_pipeline(root_path):
             and opt["rank"] == 0
         ):
             mkdir_and_rename(
-                osp.join(opt["root_path"], "experiments", "tb_logger", opt["name"])
+                Path(opt["root_path"]) / "experiments" / "tb_logger" / opt["name"]
             )
 
     # copy the yml file to the experiment root
     try:
         copy_opt_file(args.opt, opt["path"]["experiments_root"])
-    except Exception as e:
+    except:
         msg = "Failed. Make sure the option 'name' in your config file is the same as the previous state!"
         raise ValueError(msg)
 
     # WARNING: should not use get_root_logger in the above codes, including the called functions
     # Otherwise the logger will not be properly initialized
-    log_file = osp.join(opt["path"]["log"], f"train_{opt['name']}_{get_time_str()}.log")
+    log_file = Path(opt["path"]["log"]) / f"train_{opt["name"]}_{get_time_str()}.log"
     logger = get_root_logger(
         logger_name="neosr", log_level=logging.INFO, log_file=log_file
     )
@@ -188,23 +186,25 @@ def train_pipeline(root_path):
     if resume_state:  # resume training
         model.resume_training(resume_state)  # handle optimizers and schedulers
         logger.info(
-            f"Resuming training from epoch: {resume_state['epoch']}, iter: {int(resume_state['iter'])}"
+            f"Resuming training from epoch: {resume_state["epoch"]}, iter: {int(resume_state["iter"])}"
         )
         start_epoch = resume_state["epoch"]
-        current_iter = int(resume_state["iter"] * opt["datasets"]["train"].get("accumulate", 1))
-        #current_iter = resume_state["iter"]
+        current_iter = int(
+            resume_state["iter"] * opt["datasets"]["train"].get("accumulate", 1)
+        )
+        # current_iter = resume_state["iter"]
         torch.cuda.empty_cache()
     else:
         start_epoch = 0
         current_iter = 0
 
     # create message logger (formatted outputs)
-    msg_logger = MessageLogger(opt, current_iter, tb_logger)
+    msg_logger = MessageLogger(opt, tb_logger, current_iter)
 
     # dataloader prefetcher
     prefetcher = CUDAPrefetcher(train_loader, opt)
 
-    if opt["use_amp"]:
+    if opt.get("use_amp", False):
         logger.info("AMP enabled.")
 
     if opt["deterministic"]:
@@ -212,14 +212,16 @@ def train_pipeline(root_path):
 
     # training log vars
     accumulate = opt["datasets"]["train"].get("accumulate", 1)
-    print_freq = opt["logger"]["print_freq"]
+    print_freq = opt["logger"].get("print_freq", 100)
     save_checkpoint_freq = opt["logger"]["save_checkpoint_freq"]
     if opt.get("val") is not None:
         val_freq = opt["val"]["val_freq"]
 
     # training
-    logger.info(f"Start training from epoch: {start_epoch}, iter: {int(current_iter / accumulate)}")
-    #data_timer, iter_timer = AvgTimer(), AvgTimer()
+    logger.info(
+        f"Start training from epoch: {start_epoch}, iter: {int(current_iter / accumulate)}"
+    )
+    # data_timer, iter_timer = AvgTimer(), AvgTimer()
     iter_timer = AvgTimer()
     start_time = time.time()
 
@@ -230,7 +232,7 @@ def train_pipeline(root_path):
             train_data = prefetcher.next()
 
             while train_data is not None:
-                #data_timer.record()
+                # data_timer.record()
 
                 current_iter += 1
                 if current_iter > total_iters:
@@ -258,8 +260,8 @@ def train_pipeline(root_path):
                     log_vars = {"epoch": epoch, "iter": current_iter_log}
                     log_vars.update({"lrs": model.get_current_learning_rate()})
                     log_vars.update({
-                        "time": iter_timer.get_avg_time(),
-                        #"data_time": data_timer.get_avg_time(),
+                        "time": iter_timer.get_avg_time()
+                        # "data_time": data_timer.get_avg_time(),
                     })
                     log_vars.update(model.get_current_log())
                     msg_logger(log_vars)
@@ -276,10 +278,10 @@ def train_pipeline(root_path):
                             val_loader,
                             int(current_iter_log),
                             tb_logger,
-                            opt["val"]["save_img"],
+                            opt["val"].get("save_img", True),
                         )
 
-                #data_timer.start()
+                # data_timer.start()
                 iter_timer.start()
                 train_data = prefetcher.next()
             # end of iter
@@ -300,12 +302,15 @@ def train_pipeline(root_path):
         accumulate = opt["datasets"]["train"].get("accumulate", 1)
         for val_loader in val_loaders:
             model.validation(
-                val_loader, int(current_iter / accumulate), tb_logger, opt["val"]["save_img"]
+                val_loader,
+                int(current_iter / accumulate),
+                tb_logger,
+                opt["val"].get("save_img", True),
             )
     if tb_logger:
         tb_logger.close()
 
 
 if __name__ == "__main__":
-    root_path = osp.abspath(osp.join(__file__, osp.pardir))
+    root_path = Path.resolve(Path(__file__) / osp.pardir)
     train_pipeline(root_path)

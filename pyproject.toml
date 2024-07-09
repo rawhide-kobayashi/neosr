@@ -7,22 +7,20 @@ license = "Apache 2.0"
 readme = "readme.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
-numpy = "^1.25.2"
 einops = "^0.6.1"
-scipy = "^1.11.1"
-PyYAML = "^6.0.1"
-tb-nightly = "^2.14.0a20230802"
-tqdm = "^4.65.0"
+lmdb = "^1.5.1"
+numpy = "^1.25.2"
 opencv-python-headless = "^4.8.1.78"
-psutil = "^5.9.8"
+python = "^3.12"
 pywavelets = "^1.5.0"
+scipy = "^1.11.1"
+tqdm = "^4.65.0"
+tb-nightly = "^2.18.0a20240708"
 
 [tool.ruff]
-select = ["ALL"]
-ignore = [ "E501", "T201", "D", "CPY001",
-	   "TD002", "TD003", "COM812", "ISC001",
-	   "N8", "ANN", "S101" ]
+lint.select = ["ALL"]
+lint.ignore = ["D", "COM812", "ISC001", "T201", "E501", "T201", "D", "CPY", "TD002", "TD003", "COM812", "ISC001", "N8", "S101", "G004", "ERA001", "PLR", "C90", "E722", "B904", "FBT001", "FBT002", "SLF001", "S311", "FIX", "ANN" ]
+exclude = ["*_arch.py"]
 target-version = "py312"
 preview = true
 

@@ -1,17 +1,23 @@
-from os import path as osp
+from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch import nn
+from torch import Tensor, nn
 from torchvision import models
 
 from neosr.utils.registry import LOSS_REGISTRY
 
 
 class L2pooling(nn.Module):
-    def __init__(self, filter_size=5, stride=2, channels=None, as_loss=True, pad_off=0):
-        super(L2pooling, self).__init__()
+    def __init__(
+        self,
+        filter_size: int = 5,
+        stride: int = 2,
+        channels: int = 64,
+        as_loss: bool = True,
+    ) -> None:
+        super().__init__()
         self.padding = (filter_size - 2) // 2
         self.stride = stride
         self.channels = channels
@@ -24,36 +30,40 @@ class L2pooling(nn.Module):
 
         if as_loss is False:
             # send to cuda
-            self.filter = self.filter.cuda()
+            self.filter: Tensor = self.filter.cuda()
 
-    def forward(self, input):
-        input = input**2
+    def forward(self, x: Tensor) -> Tensor:
+        x = x**2
         out = F.conv2d(
-            input,
-            self.filter,
-            stride=self.stride,
-            padding=self.padding,
-            groups=input.shape[1],
+            x, self.filter, stride=self.stride, padding=self.padding, groups=x.shape[1]
         )
         return (out + 1e-12).sqrt()
 
 
 @LOSS_REGISTRY.register()
-class dists(nn.Module):
+class dists_loss(nn.Module):
     r"""DISTS. "Image Quality Assessment: Unifying Structure and Texture Similarity":
-    https://arxiv.org/abs/2004.07728
+    https://arxiv.org/abs/2004.07728.
 
     Args:
+    ----
         as_loss (bool): True to use as loss, False for metric.
             Default: True.
         loss_weight (float).
             Default: 1.0.
         load_weights (bool): loads pretrained weights for DISTS.
             Default: False.
+
     """
 
-    def __init__(self, as_loss=True, loss_weight=1.0, load_weights=True, **kwargs):
-        super(dists, self).__init__()
+    def __init__(
+        self,
+        as_loss: bool = True,
+        loss_weight: float = 1.0,
+        load_weights: bool = True,
+        **kwargs,  # noqa: ARG002
+    ) -> None:
+        super().__init__()
         self.as_loss = as_loss
         self.loss_weight = loss_weight
 
@@ -92,12 +102,13 @@ class dists(nn.Module):
         self.beta.data.normal_(0.1, 0.01)
 
         if load_weights:
-            current_dir = osp.dirname(osp.abspath(__file__))
-            model_path = osp.join(current_dir, "dists_weights.pth")
-            if osp.exists(model_path):
-                weights = torch.load(model_path)
-            else:
-                weights = None
+            current_dir = Path(Path(__file__).resolve()).parent
+            model_path = Path(current_dir) / "dists_weights.pth"
+            weights = (
+                torch.load(model_path, weights_only=True)
+                if Path(model_path).exists()
+                else None
+            )
 
             self.alpha.data = weights["alpha"]
             self.beta.data = weights["beta"]
@@ -107,7 +118,7 @@ class dists(nn.Module):
                 self.alpha.data = self.alpha.data.cuda()
                 self.beta.data = self.beta.data.cuda()
 
-    def forward_once(self, x):
+    def forward_once(self, x: Tensor) -> list[Tensor]:
         h = x
         h = self.stage1(h)
         h_relu1_2 = h
@@ -121,13 +132,11 @@ class dists(nn.Module):
         h_relu5_3 = h
         return [x, h_relu1_2, h_relu2_2, h_relu3_3, h_relu4_3, h_relu5_3]
 
-    #@torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda')
+    # @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda')
     @torch.cuda.amp.custom_fwd(cast_inputs=torch.float32)
-    def forward(self, x, y):
+    def forward(self, x: Tensor, y: Tensor) -> Tensor:
         feats0 = self.forward_once(x)
         feats1 = self.forward_once(y)
-        dist1 = 0
-        dist2 = 0
         c1 = 1e-6
         c2 = 1e-6
 
@@ -135,11 +144,13 @@ class dists(nn.Module):
         alpha = torch.split(self.alpha / w_sum, self.chns, dim=1)
         beta = torch.split(self.beta / w_sum, self.chns, dim=1)
         for k in range(len(self.chns)):
+            dist1 = 0
             x_mean = feats0[k].mean([2, 3], keepdim=True)
             y_mean = feats1[k].mean([2, 3], keepdim=True)
             S1 = (2 * x_mean * y_mean + c1) / (x_mean**2 + y_mean**2 + c1)
             dist1 = dist1 + (alpha[k] * S1).sum(1, keepdim=True)
 
+            dist2 = 0
             x_var = ((feats0[k] - x_mean) ** 2).mean([2, 3], keepdim=True)
             y_var = ((feats1[k] - y_mean) ** 2).mean([2, 3], keepdim=True)
             xy_cov = (feats0[k] * feats1[k]).mean(
@@ -149,9 +160,9 @@ class dists(nn.Module):
             dist2 = dist2 + (beta[k] * S2).sum(1, keepdim=True)
 
         if self.as_loss:
-            out = 1 - (dist1 + dist2).mean()
+            out = 1 - (dist1 + dist2).mean()  # type: ignore[attr-defined]
             out *= self.loss_weight
         else:
-            out = 1 - (dist1 + dist2).squeeze()
+            out = 1 - (dist1 + dist2).squeeze()  # type: ignore[attr-defined]
 
         return out

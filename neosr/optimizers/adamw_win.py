@@ -1,6 +1,9 @@
 import math
+from collections.abc import Callable, Iterable
+from typing import Any
 
 import torch
+from torch import Tensor
 from torch.optim.optimizer import Optimizer
 
 
@@ -11,6 +14,7 @@ class adamw_win(Optimizer):
     The AdamW variant was proposed in `Decoupled Weight Decay Regularization`_.
 
     Arguments:
+    ---------
         params (iterable): iterable of parameters to optimize or dicts defining
             parameter groups
         lr (float, optional): learning rate (default: 1e-3)
@@ -26,62 +30,67 @@ class adamw_win(Optimizer):
             (default: False)
         max_grad_norm (float, optional): value used to clip global grad norm (default: 0.0, no gradient clip)
         acceleration_mode (string, optional): win or win2 or none (vanilla AdamW)
+
     """
 
     def __init__(
         self,
-        params,
-        lr=5e-4,
-        betas=(0.98, 0.999),
-        reckless_steps=(2.0, 8.0),
-        eps=1e-8,
-        weight_decay=0.02,
-        amsgrad=False,
-        max_grad_norm=0.0,
-        acceleration_mode="win2",
-    ):
+        params: Iterable[Tensor],
+        lr: float = 5e-4,
+        betas: tuple[float, float] = (0.98, 0.999),
+        reckless_steps: tuple[float, float] = (2.0, 8.0),
+        eps: float = 1e-8,
+        weight_decay: float = 0.02,
+        amsgrad: bool = False,
+        max_grad_norm: float = 0.0,
+        acceleration_mode: str = "win2",
+    ) -> None:
         if not lr >= 0.0:
-            raise ValueError(f"Invalid learning rate: {lr}")
+            msg = f"Invalid learning rate: {lr}"
+            raise ValueError(msg)
         if not eps >= 0.0:
-            raise ValueError(f"Invalid epsilon value: {eps}")
+            msg = f"Invalid epsilon value: {eps}"
+            raise ValueError(msg)
         if not 0.0 <= betas[0] < 1.0:
-            raise ValueError(f"Invalid beta parameter at index 0: {betas[0]}")
+            msg = f"Invalid beta parameter at index 0: {betas[0]}"
+            raise ValueError(msg)
         if not 0.0 <= betas[1] < 1.0:
-            raise ValueError(f"Invalid beta parameter at index 1: {betas[1]}")
+            msg = f"Invalid beta parameter at index 1: {betas[1]}"
+            raise ValueError(msg)
         if reckless_steps[0] < 0.0:
-            raise ValueError(
-                f"Invalid reckless_steps parameter at index 0: {reckless_steps[0]}"
-            )
+            msg = f"Invalid reckless_steps parameter at index 0: {reckless_steps[0]}"
+            raise ValueError(msg)
         if reckless_steps[1] < 0.0:
-            raise ValueError(
-                f"Invalid reckless_steps parameter at index 1: {reckless_steps[1]}"
-            )
+            msg = f"Invalid reckless_steps parameter at index 1: {reckless_steps[1]}"
+            raise ValueError(msg)
 
-        defaults = dict(
-            lr=lr,
-            betas=betas,
-            reckless_steps=reckless_steps,
-            eps=eps,
-            weight_decay=weight_decay,
-            amsgrad=amsgrad,
-            max_grad_norm=max_grad_norm,
-            acceleration_mode=acceleration_mode,
-        )
+        defaults = {
+            "lr": lr,
+            "betas": betas,
+            "reckless_steps": reckless_steps,
+            "eps": eps,
+            "weight_decay": weight_decay,
+            "amsgrad": amsgrad,
+            "max_grad_norm": max_grad_norm,
+            "acceleration_mode": acceleration_mode,
+        }
 
-        super(adamw_win, self).__init__(params, defaults)
+        super().__init__(params, defaults)
 
-    def __setstate__(self, state):
-        super(adamw_win, self).__setstate__(state)
+    def __setstate__(self, state: dict[str, bool]):
+        super().__setstate__(state)
         for group in self.param_groups:
             group.setdefault("amsgrad", False)
 
     @torch.no_grad()
-    def step(self, closure=None):
+    def step(self, closure: Callable[..., Any] | None = None):
         """Performs a single optimization step.
 
         Arguments:
+        ---------
             closure (callable, optional): A closure that reevaluates the model
                 and returns the loss.
+
         """
         loss = None
         if closure is not None:
@@ -118,9 +127,8 @@ class adamw_win(Optimizer):
                     grad = p.grad
 
                 if grad.is_sparse:
-                    raise RuntimeError(
-                        "Adam does not support sparse gradients, please consider SparseAdam instead"
-                    )
+                    msg = "Adam does not support sparse gradients, please consider SparseAdam instead"
+                    raise RuntimeError(msg)
                 amsgrad = group["amsgrad"]
 
                 state = self.state[p]

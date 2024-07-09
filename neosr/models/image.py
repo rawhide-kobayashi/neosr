@@ -1,6 +1,6 @@
 import math
 from collections import OrderedDict
-from os import path as osp
+from pathlib import Path
 
 import torch
 from torch.nn import functional as F
@@ -10,24 +10,20 @@ from tqdm import tqdm
 from neosr.archs import build_network
 from neosr.data.augmentations import apply_augment
 from neosr.losses import build_loss
-from neosr.losses.loss_util import get_refined_artifact_map
 from neosr.losses.wavelet_guided import wavelet_guided
 from neosr.metrics import calculate_metric
 from neosr.models.base import base
-from neosr.optimizers.adamw_sf import adamw_sf
-from neosr.optimizers.adan import adan
-from neosr.optimizers.adan_sf import adan_sf
-from neosr.optimizers.fsam import fsam
+from neosr.optimizers import adamw_sf, adan, adan_sf, fsam
 from neosr.utils import get_root_logger, imwrite, tensor2img
 from neosr.utils.registry import MODEL_REGISTRY
 
 
 @MODEL_REGISTRY.register()
-class sisr(base):
+class image(base):
     """Single-Image Super-Resolution model."""
 
-    def __init__(self, opt):
-        super(sisr, self).__init__(opt)
+    def __init__(self, opt) -> None:
+        super().__init__(opt)
 
         # define network net_g
         self.net_g = build_network(opt["network_g"])
@@ -68,7 +64,7 @@ class sisr(base):
         if self.is_train:
             self.init_training_settings()
 
-    def init_training_settings(self):
+    def init_training_settings(self) -> None:
         # options var
         train_opt = self.opt["train"]
 
@@ -104,11 +100,8 @@ class sisr(base):
         # scale ratio var
         self.scale = self.opt["scale"]
 
-        # gt size var
-        if self.opt["model_type"] == "otf":
-            self.gt_size = self.opt["gt_size"]
-        else:
-            self.gt_size = self.opt["datasets"]["train"].get("gt_size")
+        # patch size var
+        self.patch_size = self.opt["datasets"]["train"].get("patch_size")
 
         # augmentations
         self.aug = self.opt["datasets"]["train"].get("augmentation", None)
@@ -119,13 +112,16 @@ class sisr(base):
         self.amp_dtype = (
             torch.bfloat16 if self.opt.get("bfloat16", False) is True else torch.float16
         )
-        # self.gradscaler = torch.amp.GradScaler('cuda', enabled=self.use_amp, init_scale=2.**5)
-        self.gradscaler = torch.cuda.amp.GradScaler(
+
+        # self.gradscaler_g = torch.amp.GradScaler('cuda', enabled=self.use_amp, init_scale=2.**5)
+        # self.gradscaler_d = torch.amp.GradScaler('cuda', enabled=self.use_amp, init_scale=2.**5)
+        self.gradscaler_g = torch.cuda.amp.GradScaler(
             enabled=self.use_amp, init_scale=2.0**5
         )
+        self.gradscaler_d = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
         # LQ matching for Color/Luma losses
-        self.match_lq = self.opt["train"].get("match_lq", False)
+        self.match_lq_colors = self.opt["train"].get("match_lq_colors", False)
 
         # Total expected iters
         self.total_iter = self.opt["train"].get("total_iter", 200000)
@@ -144,7 +140,7 @@ class sisr(base):
         # initialise counter of how many batches has to be accumulated
         self.n_accumulated = 0
         self.accum_iters = self.opt["datasets"]["train"].get("accumulate", 1)
-        if self.accum_iters == 0 or self.accum_iters == None:
+        if self.accum_iters in {0, None}:
             self.accum_iters = 1
 
         # define losses
@@ -253,12 +249,12 @@ class sisr(base):
             logger.warning(msg)
 
         if self.sam is not None and self.accum_iters > 1:
-            raise NotImplementedError("SAM can't be used with gradient accumulation yet.")
+            msg = "SAM can't be used with gradient accumulation yet."
+            raise NotImplementedError(msg)
 
         if pix_losses_bool is False and percep_losses_bool is False:
-            raise ValueError(
-                "Both pixel/mssim and perceptual losses are None. Please enable at least one."
-            )
+            msg = "Both pixel/mssim and perceptual losses are None. Please enable at least one."
+            raise ValueError(msg)
         if self.net_d is None and optim_d is not None:
             msg = "Please set a discriminator in network_d or disable optim_d."
             raise ValueError(msg)
@@ -271,11 +267,11 @@ class sisr(base):
         if self.net_d is None and self.cri_gan is not None:
             msg = "GAN requires a discriminator to be set."
             raise ValueError(msg)
-        if self.aug is not None and self.gt_size % 4 != 0:
-            msg = "The gt_size value must be a multiple of 4. Please change it."
+        if self.aug is not None and self.patch_size % 4 != 0:
+            msg = "The patch_size value must be a multiple of 4. Please change it."
             raise ValueError(msg)
 
-    def setup_optimizers(self):
+    def setup_optimizers(self) -> None:
         train_opt = self.opt["train"]
         optim_params = []
         for k, v in self.net_g.named_parameters():
@@ -310,9 +306,8 @@ class sisr(base):
             elif optim_type in {"Adan_SF", "adan_sf"}:
                 base_optimizer = adan_sf
             else:
-                raise NotImplementedError(
-                    f"SAM not supported by optimizer {optim_type} yet."
-                )
+                msg = f"SAM not supported by optimizer {optim_type} yet."
+                raise NotImplementedError(msg)
 
         if self.sam in {"FSAM", "fsam"}:
             self.sam_optimizer_g = fsam(
@@ -325,7 +320,8 @@ class sisr(base):
                 **train_opt["optim_g"],
             )
         elif self.sam is not None:
-            raise NotImplementedError(f"SAM type {self.sam} not supported yet.")
+            msg = f"SAM type {self.sam} not supported yet."
+            raise NotImplementedError(msg)
         else:
             pass
 
@@ -346,7 +342,7 @@ class sisr(base):
             self.optimizers.append(self.optimizer_d)
 
     @torch.no_grad()
-    def feed_data(self, data):
+    def feed_data(self, data) -> None:
         self.lq = data["lq"].to(self.device, non_blocking=True)
         if "gt" in data:
             self.gt = data["gt"].to(self.device, non_blocking=True)
@@ -366,9 +362,8 @@ class sisr(base):
 
     def eco_strategy(self, current_iter):
         """Adapted version of "Empirical Centroid-oriented Optimization":
-        https://arxiv.org/abs/2312.17526
+        https://arxiv.org/abs/2312.17526.
         """
-
         with torch.no_grad():
             # define alpha with sigmoid-like curve, slope/skew at 0.25
             if self.eco_schedule == "sigmoid":
@@ -430,7 +425,7 @@ class sisr(base):
                 self.output = self.net_g(self.lq)
 
             # lq match
-            if self.match_lq:
+            if self.match_lq_colors:
                 with torch.no_grad():
                     self.lq_interp = F.interpolate(
                         self.lq, scale_factor=self.scale, mode="bicubic", antialias=True
@@ -468,11 +463,7 @@ class sisr(base):
                 loss_dict["l_g_dists"] = l_g_dists
             # ldl loss
             if self.cri_ldl:
-                pixel_weight = get_refined_artifact_map(self.gt, self.output, 7)
-                l_g_ldl = self.cri_ldl(
-                    torch.mul(pixel_weight, self.output),
-                    torch.mul(pixel_weight, self.gt),
-                )
+                l_g_ldl = self.cri_ldl(self.output, self.gt)
                 l_g_total += l_g_ldl
                 loss_dict["l_g_ldl"] = l_g_ldl
             # focal frequency loss
@@ -487,7 +478,7 @@ class sisr(base):
                 loss_dict["l_g_gw"] = l_g_gw
             # color loss
             if self.cri_color:
-                if self.match_lq:
+                if self.match_lq_colors:
                     l_g_color = self.cri_color(self.output, self.lq_interp)
                 else:
                     l_g_color = self.cri_color(self.output, self.gt)
@@ -495,7 +486,7 @@ class sisr(base):
                 loss_dict["l_g_color"] = l_g_color
             # luma loss
             if self.cri_luma:
-                if self.match_lq:
+                if self.match_lq_colors:
                     l_g_luma = self.cri_luma(self.output, self.lq_interp)
                 else:
                     l_g_luma = self.cri_luma(self.output, self.gt)
@@ -504,7 +495,7 @@ class sisr(base):
             # GAN loss
             if self.cri_gan:
                 fake_g_pred = self.net_d(self.output)
-                l_g_gan = self.cri_gan(fake_g_pred, True, is_disc=False)
+                l_g_gan = self.cri_gan(fake_g_pred, target_is_real=True, is_disc=False)
                 l_g_total += l_g_gan
                 loss_dict["l_g_gan"] = l_g_gan
 
@@ -512,23 +503,23 @@ class sisr(base):
         loss_dict["l_g_total"] = l_g_total
 
         # divide losses by accumulation factor
-        l_g_total = l_g_total / self.accum_iters
+        l_g_total /= self.accum_iters
         # backward generator
         if self.sam and current_iter >= self.sam_init:
             l_g_total.backward()
         else:
-            self.gradscaler.scale(l_g_total).backward()
+            self.gradscaler_g.scale(l_g_total).backward()
 
-        if (self.n_accumulated) % self.accum_iters == 0:
+        if (
+            self.n_accumulated % self.accum_iters == 0
+            and self.gradclip
+            and not (self.sam is not None and current_iter >= self.sam_init)
+        ):
             # gradient clipping on generator
-            if self.gradclip:
-                if self.sam is not None and current_iter >= self.sam_init:
-                    pass
-                else:
-                    self.gradscaler.unscale_(self.optimizer_g)
-                torch.nn.utils.clip_grad_norm_(
-                    self.net_g.parameters(), 1.0, error_if_nonfinite=False
-                )
+            self.gradscaler_g.unscale_(self.optimizer_g)
+            torch.nn.utils.clip_grad_norm_(
+                self.net_g.parameters(), 1.0, error_if_nonfinite=False
+            )
 
         # optimize net_d
         if self.net_d is not None:
@@ -539,13 +530,16 @@ class sisr(base):
                 device_type="cuda", dtype=self.amp_dtype, enabled=self.use_amp
             ):
                 if self.cri_gan:
+                    if self.sf_optim_d:
+                        self.optimizer_d.eval()
+
                     # real
                     if self.wavelet_guided and self.wavelet_init >= current_iter:
                         real_d_pred = self.net_d(combined_HF_gt)
                     else:
                         real_d_pred = self.net_d(self.gt)
 
-                    l_d_real = self.cri_gan(real_d_pred, True, is_disc=True)
+                    l_d_real = self.cri_gan(real_d_pred, target_is_real=True, is_disc=True)
                     loss_dict["l_d_real"] = l_d_real
                     loss_dict["out_d_real"] = torch.mean(real_d_pred.detach())
 
@@ -555,29 +549,35 @@ class sisr(base):
                     else:
                         fake_d_pred = self.net_d(self.output.detach())
 
-                    l_d_fake = self.cri_gan(fake_d_pred, False, is_disc=True)
+                    l_d_fake = self.cri_gan(fake_d_pred, target_is_real=False, is_disc=True)
                     loss_dict["l_d_fake"] = l_d_fake
                     loss_dict["out_d_fake"] = torch.mean(fake_d_pred.detach())
 
+                    if self.sf_optim_d:
+                        self.optimizer_d.train()
+
             if self.cri_gan:
-                l_d_real = l_d_real / self.accum_iters
-                l_d_fake = l_d_fake / self.accum_iters
+                l_d_real /= self.accum_iters
+                l_d_fake /= self.accum_iters
                 # backward discriminator
                 if self.sam and current_iter >= self.sam_init:
                     l_d_real.backward()
                     l_d_fake.backward()
                 else:
-                    self.gradscaler.scale(l_d_real).backward()
-                    self.gradscaler.scale(l_d_fake).backward()
+                    self.gradscaler_d.scale(l_d_real).backward()
+                    self.gradscaler_d.scale(l_d_fake).backward()
 
-            # clip and step() discriminator
-            if (self.n_accumulated) % self.accum_iters == 0:
+            # clip discriminator
+            if (
+                self.n_accumulated % self.accum_iters == 0
+                and self.gradclip
+                and not (self.sam is not None and current_iter >= self.sam_init)
+            ):
                 # gradient clipping on discriminator
-                if self.gradclip:
-                    self.gradscaler.unscale_(self.optimizer_d)
-                    torch.nn.utils.clip_grad_norm_(
-                        self.net_d.parameters(), 1.0, error_if_nonfinite=False
-                    )
+                self.gradscaler_d.unscale_(self.optimizer_d)
+                torch.nn.utils.clip_grad_norm_(
+                    self.net_d.parameters(), 1.0, error_if_nonfinite=False
+                )
 
             # add total discriminator loss for tensorboard tracking
             loss_dict["l_d_total"] = (l_d_real + l_d_fake) / 2
@@ -597,7 +597,7 @@ class sisr(base):
         # return generator loss
         return l_g_total
 
-    def optimize_parameters(self, current_iter):
+    def optimize_parameters(self, current_iter) -> None:
         # increment accumulation counter
         self.n_accumulated += 1
         # reset accumulation counter
@@ -612,17 +612,19 @@ class sisr(base):
             if self.sam and current_iter >= self.sam_init:
                 self.sam_optimizer_g.step(self.closure, current_iter)
             else:
-                self.gradscaler.step(self.optimizer_g)
+                self.gradscaler_g.step(self.optimizer_g)
             # step() for discriminator
             if self.net_d is not None:
-                self.gradscaler.step(self.optimizer_d)
+                self.gradscaler_d.step(self.optimizer_d)
 
             # zero generator grads
             if self.sam and current_iter >= self.sam_init:
                 self.sam_optimizer_g.zero_grad(set_to_none=True)
             else:
                 # update gradscaler
-                self.gradscaler.update()
+                self.gradscaler_g.update()
+                if self.net_d is not None:
+                    self.gradscaler_d.update()
                 self.optimizer_g.zero_grad(set_to_none=True)
 
             # zero discriminator grads
@@ -632,7 +634,7 @@ class sisr(base):
             if self.ema > 0:
                 self.net_g_ema.update_parameters(self.net_g)
 
-    def test(self):
+    def test(self) -> None:
         self.tile = self.opt["val"].get("tile", -1)
         scale = self.opt["scale"]
         if self.tile == -1:
@@ -644,9 +646,9 @@ class sisr(base):
                     if self.ema > 0:
                         self.net_g_ema.eval()
                         self.output = self.net_g_ema(self.lq)
-                    else:
-                        self.net_g.eval()
-                        self.output = self.net_g(self.lq)
+                else:
+                    self.net_g.eval()
+                    self.output = self.net_g(self.lq)
 
             self.net_g.train()
             if self.sf_optim_g and self.is_train:
@@ -724,12 +726,8 @@ class sisr(base):
             with torch.inference_mode():
                 outputs = []
                 for chop in img_chops:
-
                     if self.is_train:
-                        if self.ema > 0:
-                            out = self.net_g_ema(chop)
-                        else:
-                            out = self.net_g(chop)  # image processing of each partition
+                        out = self.net_g_ema(chop) if self.ema > 0 else self.net_g(chop)
                     else:
                         out = self.net_g(chop)
 
@@ -758,11 +756,11 @@ class sisr(base):
                 :, :, 0 : h - mod_pad_h * scale, 0 : w - mod_pad_w * scale
             ]
 
-    def dist_validation(self, dataloader, current_iter, tb_logger, save_img):
+    def dist_validation(self, dataloader, current_iter, tb_logger, save_img) -> None:
         if self.opt["rank"] == 0:
             self.nondist_validation(dataloader, current_iter, tb_logger, save_img)
 
-    def nondist_validation(self, dataloader, current_iter, tb_logger, save_img):
+    def nondist_validation(self, dataloader, current_iter, tb_logger, save_img) -> None:
         # flag to not apply augmentation during val
         self.is_train = False
 
@@ -774,7 +772,7 @@ class sisr(base):
         else:
             with_metrics = self.opt["val"].get("metrics") is not None
 
-        use_pbar = self.opt["val"].get("pbar", False)
+        use_pbar = self.opt["val"].get("pbar", True)
 
         if with_metrics:
             if not hasattr(self, "metric_results"):  # only execute in the first run
@@ -787,12 +785,14 @@ class sisr(base):
         if with_metrics:
             self.metric_results = dict.fromkeys(self.metric_results, 0)
 
-        metric_data = dict()
+        metric_data = {}
         if use_pbar:
-            pbar = tqdm(total=len(dataloader), unit="image")
+            pbar = tqdm(
+                total=len(dataloader), unit="image", colour="green", ascii=" >="
+            )
 
-        for idx, val_data in enumerate(dataloader):
-            img_name = osp.splitext(osp.basename(val_data["lq_path"][0]))[0]
+        for _idx, val_data in enumerate(dataloader):
+            img_name = Path(Path(val_data["lq_path"][0]).name).stem  # [0]
             self.feed_data(val_data)
             self.test()
 
@@ -810,26 +810,26 @@ class sisr(base):
             torch.cuda.empty_cache()
 
             # check if dataset has save_img option, and if so overwrite global save_img option
-            save_img = self.opt["val"].get("save_img", False)
+            save_img = self.opt["val"].get("save_img", True)
             val_suffix = self.opt["val"].get("suffix", None)
             if save_img:
                 if self.opt["is_train"]:
-                    save_img_path = osp.join(
-                        self.opt["path"]["visualization"],
-                        img_name,
-                        f"{img_name}_{current_iter}.png",
+                    save_img_path = (
+                        Path(self.opt["path"]["visualization"])
+                        / img_name
+                        / f"{img_name}_{current_iter}.png"
                     )
-                elif val_suffix is not None: 
-                    save_img_path = osp.join(
-                        self.opt["path"]["visualization"],
-                        dataset_name,
-                        f'{img_name}_{self.opt["val"]["suffix"]}.png',
+                elif val_suffix is not None:
+                    save_img_path = (
+                        Path(self.opt["path"]["visualization"])
+                        / dataset_name
+                        / f'{img_name}_{self.opt["val"]["suffix"]}.png'
                     )
                 else:
-                    save_img_path = osp.join(
-                        self.opt["path"]["visualization"],
-                        dataset_name,
-                        f'{img_name}_{self.opt["name"]}.png',
+                    save_img_path = (
+                        Path(self.opt["path"]["visualization"])
+                        / dataset_name
+                        / f'{img_name}_{self.opt["name"]}.png'
                     )
                 imwrite(sr_img, save_img_path)
 
@@ -851,14 +851,14 @@ class sisr(base):
                     self.metric_results[name] += calculate_metric(metric_data, opt_)
             if use_pbar:
                 pbar.update(1)
-                pbar.set_description(f"Test {img_name}")
+                pbar.set_description(f"Inferring on {img_name}")
 
         if use_pbar:
             pbar.close()
 
         if with_metrics:
-            for metric in self.metric_results.keys():
-                self.metric_results[metric] /= idx + 1
+            for metric in self.metric_results:
+                self.metric_results[metric] /= _idx + 1
                 # update the best metric result
                 self._update_best_metric_result(
                     dataset_name, metric, self.metric_results[metric], current_iter
@@ -868,7 +868,9 @@ class sisr(base):
 
         self.is_train = True
 
-    def _log_validation_metric_values(self, current_iter, dataset_name, tb_logger):
+    def _log_validation_metric_values(
+        self, current_iter, dataset_name, tb_logger
+    ) -> None:
         log_str = f"Validation {dataset_name}\n\n"
         for metric, value in self.metric_results.items():
             log_str += f"\t # {metric}: {value:.4f}"
@@ -895,7 +897,7 @@ class sisr(base):
             out_dict["gt"] = self.gt.detach().cpu()
         return out_dict
 
-    def save(self, epoch, current_iter):
+    def save(self, epoch, current_iter) -> None:
         """Save networks and training state."""
         if self.ema > 0:
             self.save_network(self.net_g_ema, "net_g", current_iter)
@@ -907,7 +909,7 @@ class sisr(base):
 
         self.save_training_state(epoch, current_iter)
 
-    def _print_different_keys_loading(self, crt_net, load_net, strict=True):
+    def _print_different_keys_loading(self, crt_net, load_net, strict=True) -> None:
         """Print keys with different name or different size when loading models.
 
         1. Print keys with different names.
@@ -915,9 +917,11 @@ class sisr(base):
             It also ignore these keys with different sizes (not load).
 
         Args:
+        ----
             crt_net (torch model): Current network.
             load_net (dict): Loaded network.
             strict (bool): Whether strictly loaded. Default: True.
+
         """
         crt_net = self.get_bare_model(crt_net)
         crt_net = crt_net.state_dict()
@@ -927,10 +931,10 @@ class sisr(base):
         logger = get_root_logger()
         if crt_net_keys != load_net_keys:
             logger.warning("Current net - loaded net:")
-            for v in sorted(list(crt_net_keys - load_net_keys)):
+            for v in sorted(crt_net_keys - load_net_keys):
                 logger.warning(f"  {v}")
             logger.warning("Loaded net - current net:")
-            for v in sorted(list(load_net_keys - crt_net_keys)):
+            for v in sorted(load_net_keys - crt_net_keys):
                 logger.warning(f"  {v}")
 
         # check the size for the same keys
@@ -943,11 +947,3 @@ class sisr(base):
                         f"{crt_net[k].shape}; load_net: {load_net[k].shape}"
                     )
                     load_net[k + ".ignore"] = load_net.pop(k)
-
-
-@MODEL_REGISTRY.register()
-class default(sisr):
-    """For backward compatibility"""
-
-    def __init__(self, opt):
-        super(default, self).__init__(opt)

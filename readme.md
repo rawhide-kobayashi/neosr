@@ -64,9 +64,9 @@ Please read the [**wiki tutorial**](https://github.com/muslll/neosr/wiki/Model-C
 Start training by running:
 
 ```
-python train.py -opt options.yml
+python train.py -opt options.toml
 ```
-Where `options.yml` is a configuration file. Templates can be found in [options](options/).
+Where `options.toml` is a configuration file. Templates can be found in [options](options/).
 
 > [!TIP]
 > Please read the wiki [Configuration Walkthrough](https://github.com/muslll/neosr/wiki/Configuration-Walkthrough) for an explanation of each option.
@@ -75,27 +75,28 @@ Where `options.yml` is a configuration file. Templates can be found in [options]
 
 ### [Supported Archs](https://github.com/muslll/neosr/wiki/Arch%E2%80%90specific-options):
 
-| arch                                                                                              | option                                 		|
-|---------------------------------------------------------------------------------------------------|---------------------------------------------------|
-| [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN)                                             | `esrgan`                               		|
-| [SRVGGNetCompact](https://github.com/XPixelGroup/BasicSR/blob/master/basicsr/archs/srvgg_arch.py) | `compact`                              		|
-| [SwinIR](https://github.com/JingyunLiang/SwinIR)                                                  | `swinir_small`, `swinir_medium`        		|
-| [HAT](https://github.com/XPixelGroup/HAT)                                                         | `hat_s`, `hat_m`, `hat_l`              		|
-| [OmniSR](https://github.com/Francis0625/Omni-SR)                                                  | `omnisr`                               		|
-| [SRFormer](https://github.com/HVision-NKU/SRFormer)                                               | `srformer_light`, `srformer_medium`    		|
-| [DAT](https://github.com/zhengchen1999/dat)                                                       | `dat_small`, `dat_medium`, `dat_2` 		|
-| [DITN](https://github.com/yongliuy/DITN)							    | `ditn`				     	      	|
-| [DCTLSA](https://github.com/zengkun301/DCTLSA)						    | `dctlsa`						|
-| [SPAN](https://github.com/hongyuanyu/SPAN)							    | `span`						|
-| [Real-CUGAN](https://github.com/bilibili/ailab)				  		    | `cugan`			   			|
-| [CRAFT](https://github.com/AVC2-UESTC/CRAFT-SR)		 				    | `craft`			   			|
-| [SAFMN](https://github.com/sunny2109/SAFMN)							    | `safmn`, `safmn_l`				|
-| [RGT](https://github.com/zhengchen1999/RGT)							    | `rgt`, `rgt_s` 					|
-| [ATD](https://github.com/LabShuHangGU/Adaptive-Token-Dictionary)   				    | `atd`, `atd_light`   				|
-| [PLKSR](https://github.com/dslisleedh/PLKSR)			     				    | `plksr`, `plksr_tiny`	    			|
-| [RealPLKSR](https://github.com/dslisleedh/PLKSR/issues/4)					    | `realplksr`, `realplksr_s`			|
-| [DRCT](https://github.com/ming053l/DRCT)			     				    | `drct`, `drct_l`, `drct_s`   			|
-| [MSDAN](https://github.com/Supereeeee/MSDAN)			     				    | `msdan`			    			|
+| arch                                                                                              | option                                 			|
+|---------------------------------------------------------------------------------------------------|-----------------------------------------------------------|
+| [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN)                                             | `esrgan`                               			|
+| [SRVGGNetCompact](https://github.com/XPixelGroup/BasicSR/blob/master/basicsr/archs/srvgg_arch.py) | `compact`                              			|
+| [SwinIR](https://github.com/JingyunLiang/SwinIR)                                                  | `swinir_small`, `swinir_medium`        			|
+| [HAT](https://github.com/XPixelGroup/HAT)                                                         | `hat_s`, `hat_m`, `hat_l`              			|
+| [OmniSR](https://github.com/Francis0625/Omni-SR)                                                  | `omnisr`                               			|
+| [SRFormer](https://github.com/HVision-NKU/SRFormer)                                               | `srformer_light`, `srformer_medium`    			|
+| [DAT](https://github.com/zhengchen1999/dat)                                                       | `dat_small`, `dat_medium`, `dat_2` 			|
+| [DITN](https://github.com/yongliuy/DITN)							    | `ditn`				     	      		|
+| [DCTLSA](https://github.com/zengkun301/DCTLSA)						    | `dctlsa`							|
+| [SPAN](https://github.com/hongyuanyu/SPAN)							    | `span`							|
+| [Real-CUGAN](https://github.com/bilibili/ailab)				  		    | `cugan`			   				|
+| [CRAFT](https://github.com/AVC2-UESTC/CRAFT-SR)		 				    | `craft`			   				|
+| [SAFMN](https://github.com/sunny2109/SAFMN)							    | `safmn`, `safmn_l`					|
+| [RGT](https://github.com/zhengchen1999/RGT)							    | `rgt`, `rgt_s` 						|
+| [ATD](https://github.com/LabShuHangGU/Adaptive-Token-Dictionary)   				    | `atd`, `atd_light`   					|
+| [PLKSR](https://github.com/dslisleedh/PLKSR)			     				    | `plksr`, `plksr_tiny`	    				|
+| [RealPLKSR](https://github.com/dslisleedh/PLKSR/issues/4)					    | `realplksr`, `realplksr_s`				|
+| [DRCT](https://github.com/ming053l/DRCT)			     				    | `drct`, `drct_l`, `drct_s`   				|
+| [MSDAN](https://github.com/Supereeeee/MSDAN)			     				    | `msdan`			    				|
+| [SPANPlus](https://github.com/umzi2/SPANPlus)							    | `spanplus`, `spanplus_sts`, `spanplus_s`, `spanplus_st`   |
 
 > [!NOTE]
 > For all arch-specific parameters, [read the wiki](https://github.com/muslll/neosr/wiki/Arch%E2%80%90specific-options).
@@ -104,17 +105,15 @@ Where `options.yml` is a configuration file. Templates can be found in [options]
 
 | arch                                          		     | option               	     	    |
 |--------------------------------------------------------------------|--------------------------------------|
-| [SeemoRe](https://github.com/eduardzamfir/seemoredetails)	     | `seemore`, `seemore_t`, `seemore_l`  |
-| [RVSR](https://github.com/huai-chang/RVSR)			     | `rvsr`				    |
 
 
 ### Supported Discriminators:
 
-| net                               				  | option 		        |
-|-----------------------------------------------------------------|-----------------------------|
-| U-Net w/ SN 							  | `unet` 		        |
-| [PatchGAN](https://github.com/NVIDIA/pix2pixHD) w/ SN		  | `patchgan`			|
-| [A2-FPN](https://github.com/lironui/A2-FPN) w/ SN		  | `a2fpn`			|
+| net                               				  		| option 		        |
+|-------------------------------------------------------------------------------|-------------------------------|
+| U-Net w/ SN 							  		| `unet` 		        |
+| [PatchGAN](https://github.com/NVIDIA/pix2pixHD) w/ SN		  		| `patchgan`			|
+| EA2FPN (bespoke, based on [A2-FPN](https://github.com/lironui/A2-FPN)		| `ea2fpn`			|
 
 ### [Supported Optimizers](https://github.com/muslll/neosr/wiki/Optimizer-Options):
 

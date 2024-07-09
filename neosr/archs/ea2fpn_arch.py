@@ -1,27 +1,34 @@
 import torch
-import torch.nn.functional as F
-from torch import nn
+import torch.nn.modules.module
+from torch import Tensor, nn
 from torch.nn import Conv2d, Module, Parameter
 from torch.nn.utils import spectral_norm
 from torchvision import models
 from torchvision.models import ResNet18_Weights
 
+from neosr.archs.arch_util import DySample
 from neosr.utils.registry import ARCH_REGISTRY
 
 
-def conv3otherRelu(in_planes, out_planes, kernel_size=None, stride=None, padding=None):
-    # 3x3 convolution with padding and relu
+def conv3otherMish(
+    in_planes: int,
+    out_planes: int,
+    kernel_size: int | None = None,
+    stride: int | None = None,
+    padding: int | None = None,
+) -> nn.Sequential:
+    # 3x3 convolution with padding and mish
     if kernel_size is None:
         kernel_size = 3
-    assert isinstance(kernel_size, (int, tuple)), "kernel_size is not in (int, tuple)!"
+    assert isinstance(kernel_size, int | tuple), "kernel_size is not in (int, tuple)!"
 
     if stride is None:
         stride = 1
-    assert isinstance(stride, (int, tuple)), "stride is not in (int, tuple)!"
+    assert isinstance(stride, int | tuple), "stride is not in (int, tuple)!"
 
     if padding is None:
         padding = 1
-    assert isinstance(padding, (int, tuple)), "padding is not in (int, tuple)!"
+    assert isinstance(padding, int | tuple), "padding is not in (int, tuple)!"
 
     return nn.Sequential(
         spectral_norm(
@@ -34,32 +41,32 @@ def conv3otherRelu(in_planes, out_planes, kernel_size=None, stride=None, padding
                 bias=True,
             )
         ),
-        nn.ReLU(inplace=True),  # inplace=True
+        nn.Mish(inplace=True),
     )
 
 
-def l2_norm(x):
+def l2_norm(x: Tensor) -> Tensor:
     return torch.einsum("bcn, bn->bcn", x, 1 / torch.norm(x, p=2, dim=-2))
 
 
-class ConvBnRelu(nn.Module):
+class ConvBnMish(nn.Module):
     def __init__(
         self,
-        in_planes,
-        out_planes,
-        ksize,
-        stride,
-        pad,
-        dilation=1,
-        groups=1,
-        has_bn=True,
-        norm_layer=nn.BatchNorm2d,
-        bn_eps=1e-5,
-        has_relu=True,
-        inplace=True,
-        has_bias=False,
-    ):
-        super(ConvBnRelu, self).__init__()
+        in_planes: int,
+        out_planes: int,
+        ksize: int,
+        stride: int,
+        pad: int,
+        dilation: int = 1,
+        groups: int = 1,
+        has_bn: bool = True,
+        norm_layer: type[nn.BatchNorm2d] = nn.BatchNorm2d,
+        bn_eps: float = 1e-5,
+        has_mish: bool = True,
+        inplace: bool = True,
+        has_bias: bool = False,
+    ) -> None:
+        super().__init__()
         self.conv = spectral_norm(
             nn.Conv2d(
                 in_planes,
@@ -75,23 +82,22 @@ class ConvBnRelu(nn.Module):
         self.has_bn = has_bn
         if self.has_bn:
             self.bn = norm_layer(out_planes, eps=bn_eps)
-        self.has_relu = has_relu
-        if self.has_relu:
-            self.relu = nn.ReLU(inplace=inplace)
+        self.has_mish = has_mish
+        if self.has_mish:
+            self.mish = nn.Mish(inplace=inplace)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         x = self.conv(x)
         if self.has_bn:
             x = self.bn(x)
-        if self.has_relu:
-            x = self.relu(x)
-
+        if self.has_mish:
+            x = self.mish(x)
         return x
 
 
 class Attention(Module):
-    def __init__(self, in_places, scale=8, eps=1e-6):
-        super(Attention, self).__init__()
+    def __init__(self, in_places: int, scale: int = 8, eps: float = 1e-6) -> None:
+        super().__init__()
         self.gamma = Parameter(torch.zeros(1))
         self.in_places = in_places
         self.l2_norm = l2_norm
@@ -107,7 +113,7 @@ class Attention(Module):
             in_channels=in_places, out_channels=in_places, kernel_size=1
         )
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         # Apply the feature map to the queries and keys
         batch_size, chnnels, height, width = x.shape
         Q = self.query_conv(x).view(batch_size, -1, width * height)
@@ -134,23 +140,27 @@ class Attention(Module):
 
 
 class AttentionAggregationModule(nn.Module):
-    def __init__(self, in_chan, out_chan):
-        super(AttentionAggregationModule, self).__init__()
-        self.convblk = ConvBnRelu(in_chan, out_chan, ksize=1, stride=1, pad=0)
+    def __init__(self, in_chan: int, out_chan: int) -> None:
+        super().__init__()
+        self.convblk = ConvBnMish(in_chan, out_chan, ksize=1, stride=1, pad=0)
         self.conv_atten = Attention(out_chan)
 
-    def forward(self, s5, s4, s3, s2):
+    def forward(self, s5: Tensor, s4: Tensor, s3: Tensor, s2: Tensor) -> Tensor:
         fcat = torch.cat([s5, s4, s3, s2], dim=1)
         feat = self.convblk(fcat)
         atten = self.conv_atten(feat)
-        feat_out = atten + feat
-        return feat_out
+        return atten + feat
 
 
-class Conv3x3GNReLU(nn.Module):
-    def __init__(self, in_channels, out_channels, upsample=False):
+class Conv3x3GNMish(nn.Module):
+    def __init__(
+        self, in_channels: int, out_channels: int, upsample: bool = False
+    ) -> None:
         super().__init__()
         self.upsample = upsample
+        self.dysample = DySample(
+            in_channels=64, out_ch=64, scale=2, groups=4, end_convolution=True
+        )
         self.block = nn.Sequential(
             spectral_norm(
                 nn.Conv2d(
@@ -158,58 +168,65 @@ class Conv3x3GNReLU(nn.Module):
                 )
             ),
             nn.GroupNorm(32, out_channels),
-            nn.ReLU(inplace=True),
+            nn.Mish(inplace=True),
         )
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         x = self.block(x)
         if self.upsample:
-            x = F.interpolate(x, scale_factor=2, mode="bilinear", align_corners=True)
+            x = self.dysample(x)
         return x
 
 
 class FPNBlock(nn.Module):
-    def __init__(self, pyramid_channels, skip_channels):
+    def __init__(self, pyramid_channels: int, skip_channels: int) -> None:
         super().__init__()
         self.skip_conv = nn.Conv2d(skip_channels, pyramid_channels, kernel_size=1)
+        self.dysample = DySample(
+            in_channels=64, out_ch=64, scale=2, groups=4, end_convolution=False
+        )
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         x, skip = x
-        x = F.interpolate(x, scale_factor=2, mode="nearest")
+        x = self.dysample(x)
         skip = self.skip_conv(skip)
-
-        x = x + skip
-        return x
+        return x + skip
 
 
 class SegmentationBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, n_upsamples=0):
+    def __init__(
+        self, in_channels: int, out_channels: int, n_upsamples: int = 0
+    ) -> None:
         super().__init__()
 
-        blocks = [Conv3x3GNReLU(in_channels, out_channels, upsample=bool(n_upsamples))]
-
+        blocks = [Conv3x3GNMish(in_channels, out_channels, upsample=bool(n_upsamples))]
         if n_upsamples > 1:
-            for _ in range(1, n_upsamples):
-                blocks.append(Conv3x3GNReLU(out_channels, out_channels, upsample=True))
-
+            blocks.extend(
+                Conv3x3GNMish(out_channels, out_channels, upsample=True)
+                for _ in range(1, n_upsamples)
+            )
         self.block = nn.Sequential(*blocks)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         return self.block(x)
 
 
 @ARCH_REGISTRY.register()
-class a2fpn(nn.Module):
+class ea2fpn(nn.Module):
+    """Modified for the neosr project, based on 'A2-FPN for Semantic
+    Segmentation of Fine-Resolution Remotely Sensed Images':
+    https://doi.org/10.1080/01431161.2022.2030071.
+    """
+
     def __init__(
         self,
-        band=3,
-        class_num=6,
-        encoder_channels=[512, 256, 128, 64],
-        pyramid_channels=64,
-        segmentation_channels=64,
-        dropout=0.2,
-        **kwargs,
-    ):
+        class_num: int = 6,
+        encoder_channels: tuple[int, int, int, int] = (512, 256, 128, 64),
+        pyramid_channels: int = 64,
+        segmentation_channels: int = 64,
+        dropout: float = 0.2,
+        **kwargs,  # noqa: ARG002
+    ) -> None:
         super().__init__()
         self.base_model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
         self.base_layers = list(self.base_model.children())
@@ -252,8 +269,23 @@ class a2fpn(nn.Module):
             nn.Conv2d(segmentation_channels * 4, class_num, kernel_size=1, padding=0)
         )
         self.dropout = nn.Dropout2d(p=dropout, inplace=True)
+        self.dysample = DySample(
+            in_channels=6, out_ch=3, scale=4, groups=3, end_convolution=False
+        )
+        self.apply(self._init_weights)
 
-    def forward(self, x):
+    def _init_weights(self, m: nn.Module) -> None:
+        if isinstance(m, nn.Linear):
+            nn.init.trunc_normal_(m.weight, std=0.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(
+            m, nn.LayerNorm | nn.BatchNorm2d | nn.GroupNorm | nn.InstanceNorm2d
+        ):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+
+    def forward(self, x: Tensor) -> Tensor:
         # ==> get encoder features
         c1 = self.layer_down0(x)
         c2 = self.layer_down1(c1)
@@ -274,6 +306,4 @@ class a2fpn(nn.Module):
 
         out = self.dropout(self.attention(s5, s4, s3, s2))
         out = self.final_conv(out)
-        out = F.interpolate(out, scale_factor=4, mode="bilinear", align_corners=True)
-
-        return out
+        return self.dysample(out)

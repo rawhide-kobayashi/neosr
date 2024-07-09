@@ -1,11 +1,14 @@
 import math
+from collections.abc import Callable, Iterable
+from typing import Any
+
 import torch
+from torch import Tensor
 from torch.optim.optimizer import Optimizer
 
 
 class adamw_sf(Optimizer):
-    r"""
-    Schedule-Free AdamW
+    r"""Schedule-Free AdamW
     As the name suggests, no scheduler is needed with this optimizer.
     To add warmup, rather than using a learning rate schedule you can just
     set the warmup_steps parameter.
@@ -15,6 +18,7 @@ class adamw_sf(Optimizer):
     also be placed in eval mode when saving checkpoints.
 
     Arguments:
+    ---------
         params (iterable):
             Iterable of parameters to optimize or dicts defining
             parameter groups.
@@ -36,38 +40,39 @@ class adamw_sf(Optimizer):
         foreach (bool): Use a foreach-backed implementation of the optimizer.
             Should be significantly faster, but will have higher peak memory
             usage (default True if supported in your PyTorch version).
+
     """
 
     def __init__(
         self,
-        params,
-        lr=8e-4,
-        betas=(0.9, 0.99),
-        eps=1e-8,
-        weight_decay=0,
-        warmup_steps=0,
-        r=0.0,
-        weight_lr_power=2.0,
-        schedule_free=True,
-        foreach=hasattr(torch, "_foreach_mul_"),
-    ):
-        defaults = dict(
-            lr=lr,
-            betas=betas,
-            eps=eps,
-            r=r,
-            k=0,
-            warmup_steps=warmup_steps,
-            train_mode=True,
-            weight_sum=0.0,
-            lr_max=-1.0,
-            weight_lr_power=weight_lr_power,
-            weight_decay=weight_decay,
-            foreach=foreach,
-        )
+        params: Iterable[Tensor],
+        lr: float = 8e-4,
+        betas: tuple[float, float] = (0.9, 0.99),
+        eps: float = 1e-8,
+        weight_decay: float = 0.0,
+        warmup_steps: float = 0.0,
+        r: float = 0.0,
+        weight_lr_power: float = 2.0,
+        schedule_free: bool = True,  # noqa: ARG002
+        foreach: bool = True,
+    ) -> None:
+        defaults = {
+            "lr": lr,
+            "betas": betas,
+            "eps": eps,
+            "r": r,
+            "k": 0,
+            "warmup_steps": warmup_steps,
+            "train_mode": True,
+            "weight_sum": 0.0,
+            "lr_max": -1.0,
+            "weight_lr_power": weight_lr_power,
+            "weight_decay": weight_decay,
+            "foreach": foreach,
+        }
         super().__init__(params, defaults)
 
-    def eval(self):
+    def eval(self) -> None:
         for group in self.param_groups:
             train_mode = group["train_mode"]
             beta1, _ = group["betas"]
@@ -79,7 +84,7 @@ class adamw_sf(Optimizer):
                         p.data.lerp_(end=state["z"], weight=1 - 1 / beta1)
                 group["train_mode"] = False
 
-    def train(self):
+    def train(self) -> None:
         for group in self.param_groups:
             train_mode = group["train_mode"]
             beta1, _ = group["betas"]
@@ -91,14 +96,15 @@ class adamw_sf(Optimizer):
                         p.data.lerp_(end=state["z"], weight=1 - beta1)
                 group["train_mode"] = True
 
-    def step(self, closure=None):
+    def step(self, closure: Callable[..., Any] | None = None):
         """Performs a single optimization step.
 
         Arguments:
+        ---------
             closure (callable, optional): A closure that reevaluates the model
                 and returns the loss.
-        """
 
+        """
         loss = None
         if closure is not None:
             loss = closure()
@@ -112,10 +118,7 @@ class adamw_sf(Optimizer):
             warmup_steps = group["warmup_steps"]
             weight_lr_power = group["weight_lr_power"]
 
-            if k < warmup_steps:
-                sched = (k + 1) / warmup_steps
-            else:
-                sched = 1.0
+            sched = (k + 1) / warmup_steps if k < warmup_steps else 1.0
 
             bias_correction2 = 1 - beta2 ** (k + 1)
             lr = group["lr"] * sched * math.sqrt(bias_correction2)
@@ -131,7 +134,8 @@ class adamw_sf(Optimizer):
                 ckp1 = 0
 
             if not group["train_mode"]:
-                raise Exception("Not in train mode!")
+                msg = "Not in train mode!"
+                raise ValueError(msg)
 
             active_p = [p for p in group["params"] if p.grad is not None]
 
@@ -184,11 +188,11 @@ class adamw_sf(Optimizer):
                     z = state["z"]
                     exp_avg_sq = state["exp_avg_sq"]
 
-                    exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
-                    denom = exp_avg_sq.sqrt().add_(eps)
+                    exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)  # type: ignore[attr-defined]
+                    denom = exp_avg_sq.sqrt().add_(eps)  # type: ignore[attr-defined]
 
                     # Reuse grad buffer for memory efficiency
-                    grad_normalized = grad.div_(denom)
+                    grad_normalized = grad.div_(denom)  # type: ignore[attr-defined]
 
                     # Weight decay calculated at y
                     if decay != 0:
@@ -196,11 +200,11 @@ class adamw_sf(Optimizer):
 
                     # These operations update y in-place,
                     # without computing x explicitly.
-                    y.lerp_(end=z, weight=ckp1)
-                    y.add_(grad_normalized, alpha=lr * (beta1 * (1 - ckp1) - 1))
+                    y.lerp_(end=z, weight=ckp1)  # type: ignore[attr-defined]
+                    y.add_(grad_normalized, alpha=lr * (beta1 * (1 - ckp1) - 1))  # type: ignore[attr-defined]
 
                     # z step
-                    z.sub_(grad_normalized, alpha=lr)
+                    z.sub_(grad_normalized, alpha=lr)  # type: ignore[attr-defined]
 
             group["k"] = k + 1
         return loss

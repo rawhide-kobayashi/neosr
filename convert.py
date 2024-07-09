@@ -1,14 +1,15 @@
 import warnings
 from copy import deepcopy
 from os import path as osp
+from pathlib import Path
 
 import numpy as np
 import onnx
 import onnxruntime
 import torch
 from onnxconverter_common.float16 import convert_float_to_float16
-from onnxsim import simplify
 
+# from onnxsim import simplify
 from neosr.archs import build_network
 from neosr.utils.options import parse_options
 
@@ -40,7 +41,7 @@ def load_net():
         elif "params_ema" in load_net:
             param_key = "params_ema"
         load_net = load_net[param_key]
-    except:
+    except:  # noqa: S110
         pass
 
     # remove unnecessary 'module.'
@@ -79,7 +80,7 @@ def assert_verify(onnx_model, torch_model) -> None:
     np.testing.assert_allclose(
         torch_outputs.detach().cpu().numpy(), ort_outs[0], rtol=0.01, atol=0.001
     )
-    print(f"-------- Model successfully verified.")
+    print("-------- Model successfully verified.")
 
 
 def to_onnx() -> None:
@@ -103,18 +104,18 @@ def to_onnx() -> None:
     # dict for dynamic axes
     if args.static is None:
         dyn_axes = {
-        'dynamic_axes': {
-            'input': {0: 'batch_size', 2: 'width', 3: 'height'},
-            'output': {0: 'batch_size', 2: 'width', 3: 'height'},
-        },
-        'input_names': ["input"],
-        'output_names': ["output"],
-    }
+            "dynamic_axes": {
+                "input": {0: "batch_size", 2: "width", 3: "height"},
+                "output": {0: "batch_size", 2: "width", 3: "height"},
+            },
+            "input_names": ["input"],
+            "output_names": ["output"],
+        }
     else:
         dyn_axes = None
 
     # add _fp32 suffix to output str
-    filename, extension = osp.splitext(args.output)
+    filename, extension = osp.splitext(args.output)  # noqa: PTH122
     output_fp32 = filename + "_fp32" + extension
     # begin conversion
     print("-------- Starting ONNX conversion (this can take a while)...")
@@ -138,16 +139,17 @@ def to_onnx() -> None:
     load_onnx = onnx.load(output_fp32)
     torch.cuda.empty_cache()
     onnx.checker.check_model(load_onnx)
-    print(f"-------- Model successfully converted to ONNX format. Saved at: {output_fp32}.")
+    print(
+        f"-------- Model successfully converted to ONNX format. Saved at: {output_fp32}."
+    )
     # verify outputs
     if args.nocheck is False:
         assert_verify(output_fp32, model)
 
-
     if args.optimize:
         print("-------- Running ONNX optimization...")
-        #filename, extension = osp.splitext(args.output)
-        #output_optimized = filename + "_fp32_optimized" + extension
+        filename, extension = osp.splitext(args.output)  # noqa: PTH122
+        output_optimized = filename + "_fp32_optimized" + extension
         session_opt = onnxruntime.SessionOptions()
         # ENABLE_ALL can cause compatibility issues, leaving EXTENDED as default
         session_opt.graph_optimization_level = (
@@ -177,6 +179,9 @@ def to_onnx() -> None:
         )
 
     if args.fulloptimization:
+        msg = "ONNXSimplify has been temporarily disabled."
+        raise ValueError(msg)
+        """
         # error if network can't run through onnxsim
         opt_error = ["omnisr"]
         if args.network in opt_error:
@@ -186,6 +191,7 @@ def to_onnx() -> None:
         print("-------- Running full optimization (this can take a while)...")
         output_fp32_fulloptimized = filename + "_fp32_fullyoptimized" + extension
         output_fp16_fulloptimized = filename + "_fp16_fullyoptimized" + extension
+
         # run onnxsim
         if args.optimize:
             simplified, check = simplify(onnx.load(output_optimized))
@@ -206,11 +212,12 @@ def to_onnx() -> None:
         print(
             f"-------- Model successfully optimized. Saved at: {output_fp32_fulloptimized}\n"
         )
+        """
 
 
 if __name__ == "__main__":
     torch.set_default_device("cuda")
     warnings.filterwarnings("ignore", category=UserWarning)
-    root_path = osp.abspath(osp.join(__file__, osp.pardir))
+    root_path = Path(Path(__file__) / osp.pardir).resolve()
     __, args = parse_options(root_path)
     to_onnx()

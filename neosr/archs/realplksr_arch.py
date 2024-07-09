@@ -1,3 +1,4 @@
+# type: ignore  # noqa: PGH003
 from functools import partial
 
 import torch
@@ -11,7 +12,7 @@ upscale, __ = net_opt()
 
 
 class DCCM(nn.Sequential):
-    "Doubled Convolutional Channel Mixer"
+    """Doubled Convolutional Channel Mixer"""
 
     def __init__(self, dim: int):
         super().__init__(
@@ -23,7 +24,7 @@ class DCCM(nn.Sequential):
 
 
 class PLKConv2d(nn.Module):
-    "Partial Large Kernel Convolutional Layer"
+    """Partial Large Kernel Convolutional Layer"""
 
     def __init__(self, dim: int, kernel_size: int):
         super().__init__()
@@ -41,7 +42,7 @@ class PLKConv2d(nn.Module):
 
 
 class EA(nn.Module):
-    "Element-wise Attention"
+    """Element-wise Attention"""
 
     def __init__(self, dim: int):
         super().__init__()
@@ -84,6 +85,8 @@ class PLKBlock(nn.Module):
 
         # Group Normalization
         self.norm = nn.GroupNorm(norm_groups, dim)
+        nn.init.constant_(self.norm.bias, 0)
+        nn.init.constant_(self.norm.weight, 1.0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_skip = x
@@ -141,7 +144,7 @@ class realplksr(nn.Module):
         )
 
         if dysample and upscaling_factor != 1:
-            groups = out_ch if 3 * upscaling_factor**2 < 4 else 4
+            groups = out_ch if upscaling_factor % 2 != 0 else 4
             self.to_img = DySample(
                 in_ch * upscaling_factor**2,
                 out_ch,
