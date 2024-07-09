@@ -30,8 +30,8 @@ def toml_load(f) -> dict[str, Any]:
         raise tomllib.TOMLDecodeError(msg)
         sys.exit(1)
 
-def parse_options(init_dist_launcher=False,
-    root_path: PosixPath | str, is_train: bool = True
+def parse_options(
+    root_path: PosixPath | str, is_train: bool = True, init_dist_launcher=False
 ) -> tuple[dict[str, Any] | None, argparse.Namespace]:
     parser = argparse.ArgumentParser(
         prog="neosr",
