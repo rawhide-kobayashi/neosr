@@ -37,7 +37,7 @@ def toml_load(f) -> dict[str, Any]:
 
 
 def parse_options(
-    root_path: PosixPath | str, is_train: bool = True
+    root_path: PosixPath | str, is_train: bool = True, init_dist_launcher=False
 ) -> tuple[dict[str, Any], argparse.Namespace]:
     parser = argparse.ArgumentParser(
         prog="neosr",
@@ -179,7 +179,7 @@ def parse_options(
         # distributed settings
         if args.launcher == "none":
             opt["dist"] = False
-        else:
+        elif init_dist_launcher == True:
             opt["dist"] = True
             if args.launcher == "slurm" and "dist_params" in opt:
                 init_dist(args.launcher, **opt["dist_params"])
