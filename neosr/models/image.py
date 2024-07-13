@@ -682,14 +682,13 @@ class image(base):
             if self.sf_optim_g and self.is_train:
                 self.optimizer_g.eval()  # type: ignore[attr-defined]
 
-            with torch.inference_mode():
-                if hasattr(self, "ema"):
-                    if self.ema > 0:
-                        self.net_g_ema.eval()
-                        self.output = self.net_g_ema(self.lq)
-                else:
-                    self.net_g.eval()  # type: ignore[reportAttributeAccessIssue,attr-defined]
-                    self.output = self.net_g(self.lq)  # type: ignore[reportCallIssue,operator]
+            if hasattr(self, "ema"):
+                if self.ema > 0:
+                    self.net_g_ema.eval()
+                    self.output = self.net_g_ema(self.lq)
+            else:
+                self.net_g.eval()  # type: ignore[reportAttributeAccessIssue,attr-defined]
+                self.output = self.net_g(self.lq)  # type: ignore[reportCallIssue,operator]
 
             self.net_g.train()  # type: ignore[reportAttributeAccessIssue,attr-defined]
             if self.sf_optim_g and self.is_train:
@@ -764,31 +763,30 @@ class image(base):
             if self.sf_optim_g and self.is_train:
                 self.optimizer_g.eval()  # type: ignore[attr-defined]
 
-            with torch.inference_mode():
-                outputs = []
-                for chop in img_chops:
-                    if self.is_train:
-                        out = self.net_g_ema(chop) if self.ema > 0 else self.net_g(chop)  # type: ignore[reportCallIssue,operator]
-                    else:
-                        out = self.net_g(chop)  # type: ignore[reportCallIssue,operator]
+            outputs = []
+            for chop in img_chops:
+                if self.is_train:
+                    out = self.net_g_ema(chop) if self.ema > 0 else self.net_g(chop)  # type: ignore[reportCallIssue,operator]
+                else:
+                    out = self.net_g(chop)  # type: ignore[reportCallIssue,operator]
 
-                    outputs.append(out)
-                _img = torch.zeros(1, C, H * scale, W * scale)
-                # merge
-                for i in range(ral):
-                    for j in range(row):
-                        top = slice(i * split_h * scale, (i + 1) * split_h * scale)
-                        left = slice(j * split_w * scale, (j + 1) * split_w * scale)
-                        if i == 0:
-                            _top = slice(0, split_h * scale)
-                        else:
-                            _top = slice(shave_h * scale, (shave_h + split_h) * scale)
-                        if j == 0:
-                            _left = slice(0, split_w * scale)
-                        else:
-                            _left = slice(shave_w * scale, (shave_w + split_w) * scale)
-                        _img[..., top, left] = outputs[i * row + j][..., _top, _left]
-                self.output = _img
+                outputs.append(out)
+            _img = torch.zeros(1, C, H * scale, W * scale)
+            # merge
+            for i in range(ral):
+                for j in range(row):
+                    top = slice(i * split_h * scale, (i + 1) * split_h * scale)
+                    left = slice(j * split_w * scale, (j + 1) * split_w * scale)
+                    if i == 0:
+                        _top = slice(0, split_h * scale)
+                    else:
+                        _top = slice(shave_h * scale, (shave_h + split_h) * scale)
+                    if j == 0:
+                        _left = slice(0, split_w * scale)
+                    else:
+                        _left = slice(shave_w * scale, (shave_w + split_w) * scale)
+                    _img[..., top, left] = outputs[i * row + j][..., _top, _left]
+            self.output = _img
             self.net_g.train()  # type: ignore[reportAttributeAccessIssue,attr-defined]
             if self.sf_optim_g and self.is_train:
                 self.optimizer_g.train()  # type: ignore[attr-defined]
