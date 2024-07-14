@@ -230,10 +230,17 @@ class ea2fpn(nn.Module):
         super().__init__()
         self.base_model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
         
+        # Collect the names of the ReLU modules to be modified
+        relu_module_names = []
         for name, module in self.base_model.named_modules():
             if isinstance(module, nn.ReLU):
-                # Create a new ReLU layer without in-place operation
-                setattr(self.base_model, name, nn.ReLU(inplace=False))
+                relu_module_names.append(name)
+        
+        # Modify the in-place operations for ReLU activations
+        for name in relu_module_names:
+            # Replace with new ReLU layer without in-place operation
+            parent, attr = self._get_parent_attr(self.base_model, name)
+            setattr(parent, attr, nn.ReLU(inplace=False))
                 
         self.base_layers = list(self.base_model.children())
         # ==> encoder layers
@@ -279,6 +286,14 @@ class ea2fpn(nn.Module):
             in_channels=6, out_ch=3, scale=4, groups=3, end_convolution=False
         )
         self.apply(self._init_weights)
+
+    def _get_parent_attr(self, model, name):
+        """Helper function to get the parent module and attribute name."""
+        components = name.split('.')
+        parent = model
+        for comp in components[:-1]:
+            parent = getattr(parent, comp)
+        return parent, components[-1]
 
     def _init_weights(self, m: nn.Module) -> None:
         if isinstance(m, nn.Linear):
