@@ -487,13 +487,17 @@ class base:
             _losses = []
             for name, value in loss_dict.items():
                 keys.append(name)
-                _losses.append(value.to('cuda:0'))  # Move to 'cuda:0' for reduction
+                if value is not None and value.numel() > 0:
+                    _losses.append(value.to('cuda:0'))  # Move to 'cuda:0' for reduction
 
             if len(_losses) == 0:
-                raise ValueError("All tensors in _losses are empty")
+                raise ValueError("All tensors in _losses are empty or None")
 
             # Ensure all tensors are on the same device before reduction
             losses = torch.stack(_losses, 0)
+
+            if torch.isnan(losses).any():
+                raise ValueError("NaN detected in losses after reduction")
 
             # Use all_reduce for sum across all processes
             torch.distributed.all_reduce(losses)
