@@ -493,6 +493,8 @@ class base:
             if len(_losses) == 0:
                 raise ValueError("All tensors in _losses are empty or None")
 
+            print(_losses)
+
             # Ensure all tensors are on the same device before reduction
             losses = torch.stack(_losses, 0)
 
