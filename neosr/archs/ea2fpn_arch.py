@@ -280,7 +280,7 @@ class ea2fpn(nn.Module):
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(
-            m, nn.LayerNorm | nn.BatchNorm2d | nn.GroupNorm | nn.InstanceNorm2d
+            m, nn.LayerNorm | nn.SyncBatchNorm | nn.GroupNorm | nn.InstanceNorm2d
         ):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
