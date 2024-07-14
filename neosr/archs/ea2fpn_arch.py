@@ -60,7 +60,7 @@ class ConvBnMish(nn.Module):
         dilation: int = 1,
         groups: int = 1,
         has_bn: bool = True,
-        norm_layer: type[nn.BatchNorm2d] = nn.BatchNorm2d,
+        norm_layer: type[nn.SyncBatchNorm] = nn.SyncBatchNorm,
         bn_eps: float = 1e-5,
         has_mish: bool = True,
         inplace: bool = False,
