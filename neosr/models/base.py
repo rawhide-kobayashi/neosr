@@ -494,6 +494,7 @@ class base:
             if self.opt["dist"]:
                 keys = []
                 _losses = []
+                print(_losses)
                 for name, value in loss_dict.items():
                     keys.append(name)
                     _losses.append(value)
