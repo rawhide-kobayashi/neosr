@@ -63,7 +63,7 @@ class ConvBnMish(nn.Module):
         norm_layer: type[nn.BatchNorm2d] = nn.BatchNorm2d,
         bn_eps: float = 1e-5,
         has_mish: bool = True,
-        inplace: bool = True,
+        inplace: bool = False,
         has_bias: bool = False,
     ) -> None:
         super().__init__()
