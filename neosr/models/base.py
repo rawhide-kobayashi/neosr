@@ -494,10 +494,10 @@ class base:
             if self.opt["dist"]:
                 keys = []
                 _losses = []
-                print(_losses)
                 for name, value in loss_dict.items():
                     keys.append(name)
                     _losses.append(value)
+                print(_losses)
                 losses = torch.stack(_losses, 0)
                 losses = torch.distributed.reduce(losses, dst=0)  # type: ignore[reportAttributeAccessIssue]
                 print(losses)
