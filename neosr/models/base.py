@@ -480,33 +480,29 @@ class base:
         for i, s in enumerate(resume_schedulers):
             self.schedulers[i].load_state_dict(s)
 
-    def reduce_loss_dict(self, loss_dict: dict[Any, Any]) -> OrderedDict:
-        """Reduce loss dict.
-
-        In distributed training, it averages the losses among different GPUs .
-
-        Args:
-        ----
-            loss_dict (OrderedDict): Loss dict.
-
-        """
-        with torch.inference_mode():
-            if self.opt["dist"]:
-                keys = []
-                _losses = []
-                for name, value in loss_dict.items():
-                    keys.append(name)
-                    _losses.append(value)
-                print(_losses)
-                losses = torch.stack(_losses, 0)
-                losses = torch.distributed.reduce(losses, dst=0)  # type: ignore[reportAttributeAccessIssue]
-                print(losses)
-                if self.opt["rank"] == 0:
-                    losses /= self.opt["world_size"]
-                loss_dict = dict(zip(keys, losses, strict=True))
-
-            log_dict = OrderedDict()
+    def reduce_loss_dict(self, loss_dict: dict) -> OrderedDict:
+        """Reduce loss dict."""
+        if self.opt["dist"]:
+            keys = []
+            _losses = []
             for name, value in loss_dict.items():
-                log_dict[name] = value.mean().item()
+                keys.append(name)
+                _losses.append(value.to('cuda:0'))  # Move to desired device for reduction
 
-            return log_dict
+            # Ensure all tensors are on the same device before reduction
+            losses = torch.stack(_losses, 0)
+            torch.distributed.reduce(losses, dst=0)  # Reduce to rank 0
+
+            if self.opt["rank"] == 0:
+                losses /= self.opt["world_size"]  # Average the losses
+
+            # Update loss_dict with reduced losses
+            for i, name in enumerate(keys):
+                loss_dict[name] = losses[i]
+
+        # Compute mean and create log_dict
+        log_dict = OrderedDict()
+        for name, value in loss_dict.items():
+            log_dict[name] = value.mean().item()
+
+        return log_dict
