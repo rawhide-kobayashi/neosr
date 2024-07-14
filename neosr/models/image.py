@@ -470,7 +470,7 @@ class image(base):
                 with torch.no_grad():
                     combined_HF, combined_HF_gt = wavelet_guided(self.output, self.gt)
 
-            l_g_total: Tensor = torch.zeros(1)
+            l_g_total = 0
             loss_dict = OrderedDict()
 
             # pixel loss
