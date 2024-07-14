@@ -229,18 +229,12 @@ class ea2fpn(nn.Module):
     ) -> None:
         super().__init__()
         self.base_model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+
+        # Replace ReLU inplace operations
+        self._replace_relu_inplace()
         
-        # Collect the names of the ReLU modules to be modified
-        relu_module_names = []
-        for name, module in self.base_model.named_modules():
-            if isinstance(module, nn.ReLU):
-                relu_module_names.append(name)
-        
-        # Modify the in-place operations for ReLU activations
-        for name in relu_module_names:
-            # Replace with new ReLU layer without in-place operation
-            parent, attr = self._get_parent_attr(self.base_model, name)
-            setattr(parent, attr, nn.ReLU(inplace=False))
+        # Replace BatchNorm2d with SyncBatchNorm
+        self.base_model = self._convert_sync_batchnorm(self.base_model)
                 
         self.base_layers = list(self.base_model.children())
         # ==> encoder layers
@@ -287,6 +281,19 @@ class ea2fpn(nn.Module):
         )
         self.apply(self._init_weights)
 
+    def _replace_relu_inplace(self):
+        # Collect the names of the ReLU modules to be modified
+        relu_module_names = []
+        for name, module in self.base_model.named_modules():
+            if isinstance(module, nn.ReLU):
+                relu_module_names.append(name)
+        
+        # Modify the in-place operations for ReLU activations
+        for name in relu_module_names:
+            # Replace with new ReLU layer without in-place operation
+            parent, attr = self._get_parent_attr(self.base_model, name)
+            setattr(parent, attr, nn.ReLU(inplace=False))
+
     def _get_parent_attr(self, model, name):
         """Helper function to get the parent module and attribute name."""
         components = name.split('.')
@@ -294,6 +301,17 @@ class ea2fpn(nn.Module):
         for comp in components[:-1]:
             parent = getattr(parent, comp)
         return parent, components[-1]
+    
+    def _convert_sync_batchnorm(self, model):
+        """Convert BatchNorm2d layers to SyncBatchNorm layers."""
+        for name, module in model.named_children():
+            if isinstance(module, nn.BatchNorm2d):
+                sync_bn = nn.SyncBatchNorm(module.num_features)
+                sync_bn.load_state_dict(module.state_dict())
+                setattr(model, name, sync_bn)
+            elif len(list(module.children())) > 0:
+                self._convert_sync_batchnorm(module)
+        return model
 
     def _init_weights(self, m: nn.Module) -> None:
         if isinstance(m, nn.Linear):
