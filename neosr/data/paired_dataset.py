@@ -162,8 +162,8 @@ class paired(data.Dataset):
 
         # normalize
         if self.mean is not None or self.std is not None:
-            normalize(img_lq, self.mean, self.std, inplace=True)  # type: ignore[reportArgumentType]
-            normalize(img_gt, self.mean, self.std, inplace=True)  # type: ignore[reportArgumentType]
+            normalize(img_lq, self.mean, self.std, inplace=False)  # type: ignore[reportArgumentType]
+            normalize(img_gt, self.mean, self.std, inplace=False)  # type: ignore[reportArgumentType]
 
         return {"lq": img_lq, "gt": img_gt, "lq_path": lq_path, "gt_path": gt_path}
 
