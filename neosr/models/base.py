@@ -487,16 +487,21 @@ class base:
             _losses = []
             for name, value in loss_dict.items():
                 keys.append(name)
-                _losses.append(value.to('cuda:0'))  # Move to desired device for reduction
+                _losses.append(value.to('cuda:0'))  # Move to 'cuda:0' for reduction
+
+            if len(_losses) == 0:
+                raise ValueError("All tensors in _losses are empty")
 
             # Ensure all tensors are on the same device before reduction
             losses = torch.stack(_losses, 0)
-            torch.distributed.reduce(losses, dst=0)  # Reduce to rank 0
 
-            if self.opt["rank"] == 0:
-                losses /= self.opt["world_size"]  # Average the losses
+            # Use all_reduce for sum across all processes
+            torch.distributed.all_reduce(losses)
 
-            # Update loss_dict with reduced losses
+            # Average the losses across all processes
+            losses /= self.opt["world_size"]
+
+            # Update loss_dict with reduced and averaged losses
             for i, name in enumerate(keys):
                 loss_dict[name] = losses[i]
 
