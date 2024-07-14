@@ -41,7 +41,7 @@ def conv3otherMish(
                 bias=True,
             )
         ),
-        nn.Mish(inplace=True),
+        nn.Mish(inplace=False),
     )
 
 
@@ -168,7 +168,7 @@ class Conv3x3GNMish(nn.Module):
                 )
             ),
             nn.GroupNorm(32, out_channels),
-            nn.Mish(inplace=True),
+            nn.Mish(inplace=False),
         )
 
     def forward(self, x: Tensor) -> Tensor:
@@ -268,7 +268,7 @@ class ea2fpn(nn.Module):
         self.final_conv = spectral_norm(
             nn.Conv2d(segmentation_channels * 4, class_num, kernel_size=1, padding=0)
         )
-        self.dropout = nn.Dropout2d(p=dropout, inplace=True)
+        self.dropout = nn.Dropout2d(p=dropout, inplace=False)
         self.dysample = DySample(
             in_channels=6, out_ch=3, scale=4, groups=3, end_convolution=False
         )
