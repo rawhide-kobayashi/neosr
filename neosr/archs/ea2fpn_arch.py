@@ -229,6 +229,12 @@ class ea2fpn(nn.Module):
     ) -> None:
         super().__init__()
         self.base_model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+        
+        for name, module in self.base_model.named_modules():
+            if isinstance(module, nn.ReLU):
+                # Create a new ReLU layer without in-place operation
+                setattr(self.base_model, name, nn.ReLU(inplace=False))
+                
         self.base_layers = list(self.base_model.children())
         # ==> encoder layers
         self.layer_down0 = nn.Sequential(
