@@ -81,8 +81,7 @@ class DySample(nn.Module):
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        torch.autograd.set_detect_anomaly(True)
-        #logging.info(f'Forward pass started. Scope weight: {self.scope.weight}')
+        logging.info(f'Forward pass started in module: {self.__class__.__name__}')
         offset = self.offset(x) * self.scope(x).sigmoid() * 0.5 + self.init_pos
         B, _, H, W = offset.shape
         offset = offset.view(B, 2, -1, H, W)
@@ -120,16 +119,16 @@ class DySample(nn.Module):
         if self.end_convolution:
             output = self.end_conv(output)
 
-        #logging.info(f'Forward pass ended. Output shape: {output.shape}')
+        logging.info(f'Forward pass ended in module: {self.__class__.__name__}')
         return output
 
     @staticmethod
     def forward_hook(module, input, output):
-        logging.info(f'Forward hook triggered. Module: {module}) #, Input: {input}, Output: {output}')
+        logging.info(f'Forward hook triggered in module: {module.__class__.__name__}')
 
     @staticmethod
     def backward_hook(module, grad_input, grad_output):
-        logging.info(f'Backward hook triggered. Module: {module}) #, Grad Input: {grad_input}, Grad Output: {grad_output}')
+        logging.info(f'Backward hook triggered in module: {module.__class__.__name__}')
 
 
 def drop_path(
