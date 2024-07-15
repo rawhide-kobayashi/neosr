@@ -633,7 +633,6 @@ class image(base):
             raise ValueError(msg)
 
         # average losses among gpu's, if doing distributed training
-        print(loss_dict)
         self.log_dict = self.reduce_loss_dict(loss_dict)
 
         # return generator loss
