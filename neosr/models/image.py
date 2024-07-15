@@ -639,7 +639,6 @@ class image(base):
         return l_g_total
 
     def optimize_parameters(self, current_iter: int) -> None:
-        torch.autograd.set_detect_anomaly(True)
         # increment accumulation counter
         self.n_accumulated += 1
         # reset accumulation counter
