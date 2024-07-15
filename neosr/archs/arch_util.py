@@ -78,7 +78,7 @@ class DySample(nn.Module):
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        logging.info(f'Forward pass started. Scope weight: {self.scope.weight}')
+        #logging.info(f'Forward pass started. Scope weight: {self.scope.weight}')
         offset = self.offset(x) * self.scope(x).sigmoid() * 0.5 + self.init_pos
         B, _, H, W = offset.shape
         offset = offset.view(B, 2, -1, H, W)
@@ -116,7 +116,7 @@ class DySample(nn.Module):
         if self.end_convolution:
             output = self.end_conv(output)
 
-        logging.info(f'Forward pass ended. Output shape: {output.shape}')
+        #logging.info(f'Forward pass ended. Output shape: {output.shape}')
         return output
 
 
