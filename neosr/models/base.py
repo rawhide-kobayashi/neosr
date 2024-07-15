@@ -497,7 +497,6 @@ class base:
             for name, value in loss_dict.items():
                 keys.append(name)
                 _losses.append(value)
-            print(_losses)
             losses = torch.stack(_losses, 0)
             torch.distributed.reduce(losses, dst=0)  # type: ignore[reportAttributeAccessIssue]
             if self.opt["rank"] == 0:
