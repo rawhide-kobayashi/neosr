@@ -68,6 +68,9 @@ class DySample(nn.Module):
 
         self.register_buffer("init_pos", self._init_pos())
 
+        self.scope.register_forward_hook(self.forward_hook)
+        self.scope.register_backward_hook(self.backward_hook)
+
     def _init_pos(self) -> Tensor:
         h = torch.arange((-self.scale + 1) / 2, (self.scale - 1) / 2 + 1) / self.scale
         return (
@@ -119,6 +122,14 @@ class DySample(nn.Module):
 
         #logging.info(f'Forward pass ended. Output shape: {output.shape}')
         return output
+
+    @staticmethod
+    def forward_hook(module, input, output):
+        logging.info(f'Forward hook triggered. Module: {module}, Input: {input}, Output: {output}')
+
+    @staticmethod
+    def backward_hook(module, grad_input, grad_output):
+        logging.info(f'Backward hook triggered. Module: {module}, Grad Input: {grad_input}, Grad Output: {grad_output}')
 
 
 def drop_path(
