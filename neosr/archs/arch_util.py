@@ -78,6 +78,7 @@ class DySample(nn.Module):
         )
 
     def forward(self, x: Tensor) -> Tensor:
+        torch.autograd.set_detect_anomaly(True)
         #logging.info(f'Forward pass started. Scope weight: {self.scope.weight}')
         offset = self.offset(x) * self.scope(x).sigmoid() * 0.5 + self.init_pos
         B, _, H, W = offset.shape
