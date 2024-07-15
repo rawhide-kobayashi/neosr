@@ -325,7 +325,6 @@ class ea2fpn(nn.Module):
             nn.init.constant_(m.weight, 1.0)
 
     def forward(self, x: Tensor) -> Tensor:
-        torch.autograd.set_detect_anomaly(True)
         # ==> get encoder features
         c1 = self.layer_down0(x)
         c2 = self.layer_down1(c1)
