@@ -125,11 +125,11 @@ class DySample(nn.Module):
 
     @staticmethod
     def forward_hook(module, input, output):
-        logging.info(f'Forward hook triggered. Module: {module}, Input: {input}, Output: {output}')
+        logging.info(f'Forward hook triggered. Module: {module}) #, Input: {input}, Output: {output}')
 
     @staticmethod
     def backward_hook(module, grad_input, grad_output):
-        logging.info(f'Backward hook triggered. Module: {module}, Grad Input: {grad_input}, Grad Output: {grad_output}')
+        logging.info(f'Backward hook triggered. Module: {module}) #, Grad Input: {grad_input}, Grad Output: {grad_output}')
 
 
 def drop_path(
