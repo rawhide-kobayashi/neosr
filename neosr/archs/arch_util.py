@@ -81,7 +81,7 @@ class DySample(nn.Module):
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        logging.info(f'Forward pass started in module: {self.__class__.__name__}')
+        #logging.info(f'Forward pass started in module: {self.__class__.__name__}')
         offset = self.offset(x) * self.scope(x).sigmoid() * 0.5 + self.init_pos
         B, _, H, W = offset.shape
         offset = offset.view(B, 2, -1, H, W)
@@ -119,7 +119,7 @@ class DySample(nn.Module):
         if self.end_convolution:
             output = self.end_conv(output)
 
-        logging.info(f'Forward pass ended in module: {self.__class__.__name__}')
+        #logging.info(f'Forward pass ended in module: {self.__class__.__name__}')
         return output
 
     @staticmethod
@@ -128,7 +128,10 @@ class DySample(nn.Module):
 
     @staticmethod
     def backward_hook(module, grad_input, grad_output):
-        logging.info(f'Backward hook triggered in module: {module.__class__.__name__}')
+        if isinstance(module, nn.Conv2d):
+            logging.info(f'Backward hook triggered in module: {module.__class__.__name__} with id {id(module)}')
+            if hasattr(module, 'weight') and module.weight is not None:
+                logging.info(f'Parameter name: {module.weight.name if hasattr(module.weight, "name") else "unknown"}'
 
 
 def drop_path(
