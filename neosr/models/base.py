@@ -498,8 +498,7 @@ class base:
                 _losses.append(value)
             print(_losses)
             losses = torch.stack(_losses, 0)
-            losses = torch.distributed.reduce(losses, dst=0)  # type: ignore[reportAttributeAccessIssue]
-            print(losses)
+            torch.distributed.reduce(losses, dst=0)  # type: ignore[reportAttributeAccessIssue]
             if self.opt["rank"] == 0:
                 losses /= self.opt["world_size"]
             loss_dict = dict(zip(keys, losses, strict=True))
