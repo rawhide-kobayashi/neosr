@@ -143,6 +143,7 @@ class base:
                 net,
                 device_ids=[torch.cuda.current_device()],
                 find_unused_parameters=find_unused_parameters,
+                static_graph=True
             )
         elif self.opt["num_gpu"] > 1:
             net = DataParallel(net)  # type: ignore[type-var]
