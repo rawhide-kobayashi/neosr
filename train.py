@@ -143,6 +143,7 @@ def load_resume_state(opt: dict[str, Any]):
 
 
 def train_pipeline(root_path: str) -> None:
+    torch.autograd.set_detect_anomaly(True)
     # parse options, set distributed setting, set random seed
     opt, args = parse_options(root_path, is_train=True, init_dist_launcher=True)
     opt["root_path"] = root_path
