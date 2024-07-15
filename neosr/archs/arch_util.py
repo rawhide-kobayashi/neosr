@@ -131,7 +131,7 @@ class DySample(nn.Module):
         if isinstance(module, nn.Conv2d):
             logging.info(f'Backward hook triggered in module: {module.__class__.__name__} with id {id(module)}')
             if hasattr(module, 'weight') and module.weight is not None:
-                logging.info(f'Parameter name: {module.weight.name if hasattr(module.weight, "name") else "unknown"}'
+                logging.info(f'Parameter name: {module.weight.name if hasattr(module.weight, "name") else "unknown"}')
 
 
 def drop_path(
