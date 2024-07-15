@@ -65,9 +65,6 @@ class DySample(nn.Module):
 
         self.register_buffer("init_pos", self._init_pos())
 
-        self.scope.register_forward_hook(self.forward_hook)
-        self.scope.register_backward_hook(self.backward_hook)
-
     def _init_pos(self) -> Tensor:
         h = torch.arange((-self.scale + 1) / 2, (self.scale - 1) / 2 + 1) / self.scale
         return (
